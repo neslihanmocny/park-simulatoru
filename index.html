@@ -1,0 +1,909 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Park Simülatörü</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: sürüş alanı (canvas) üstte, altında kumanda paneli + adım listesi; dar ekranda tek sütun */
+:root{
+  --bg:#eef1f5; --panel:#ffffff; --fg:#17202b; --muted:#5d6876; --line:#d6dce4;
+  --accent:#1f5fbf; --accent-fg:#ffffff; --warn:#c2410c; --ok:#15803d;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif; --body:"Barlow",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10151c; --panel:#18202a; --fg:#e7ecf2; --muted:#9aa6b4; --line:#2a3542;
+  --accent:#5b93e6; --accent-fg:#0b1220; --warn:#fb923c; --ok:#4ade80; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10151c; --panel:#18202a; --fg:#e7ecf2; --muted:#9aa6b4; --line:#2a3542;
+  --accent:#5b93e6; --accent-fg:#0b1220; --warn:#fb923c; --ok:#4ade80; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--body);margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:18px 32px;display:grid;gap:14px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.psign{width:40px;height:40px;border-radius:7px;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font:700 28px/1 var(--display);flex:none}
+h1{font:700 30px/1 var(--display);letter-spacing:.01em;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:0;font-size:14px}
+.tabs{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+.tab{font:600 15px var(--body);border:1px solid var(--line);background:var(--panel);color:var(--fg);padding:7px 14px;border-radius:999px;cursor:pointer}
+.tab[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.stage{position:relative;border-radius:12px;overflow:hidden;background:#3a3f45;aspect-ratio:16/8;max-width:100%;min-height:240px}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+.toast{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:rgba(15,20,26,.88);color:#fff;padding:8px 16px;border-radius:999px;font-weight:600;font-size:14px;white-space:nowrap;max-width:calc(100% - 24px);overflow:hidden;text-overflow:ellipsis}
+.toast.ok{background:#15803d}.toast.bad{background:#b42318}
+.hud{position:absolute;right:10px;bottom:10px;display:flex;gap:6px;font:600 13px var(--body);color:#fff}
+.hud span{background:rgba(15,20,26,.75);padding:4px 9px;border-radius:6px;font-variant-numeric:tabular-nums}
+.gear{font:700 15px var(--display)!important;min-width:30px;text-align:center}
+.gear.r{background:#b42318!important}
+.main,.left,.side{display:grid;gap:14px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+.card h2{font:700 19px/1.1 var(--display);letter-spacing:.03em;text-transform:uppercase;margin:0 0 12px;color:var(--muted)}
+.controls{display:grid;grid-template-columns:auto minmax(0,1fr);gap:16px;align-items:center}
+.wheel{width:96px;height:96px}
+.steer{display:grid;gap:6px;min-width:0}
+.steer label{font-size:13px;color:var(--muted);display:flex;justify-content:space-between}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.pedals{display:flex;gap:8px;flex-wrap:wrap;grid-column:1/-1}
+.btn{font:600 15px var(--body);border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:10px;padding:10px 14px;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none}
+.btn:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.big{flex:1 1 120px;padding:14px;font:700 18px var(--display);letter-spacing:.04em}
+.btn.fwd.on{background:var(--ok);color:#fff;border-color:var(--ok)}
+.btn.rev.on{background:var(--warn);color:#fff;border-color:var(--warn)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;grid-column:1/-1}
+.chk{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--muted);cursor:pointer}
+.keys{grid-column:1/-1;font-size:13px;color:var(--muted);margin:0}
+kbd{font:600 12px var(--body);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--bg)}
+ol.steps{list-style:none;margin:0;padding:0;display:grid;gap:8px;counter-reset:s}
+ol.steps li{counter-increment:s;display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;padding:8px 10px;border-radius:8px;border:1px solid transparent;transition:background .2s}
+ol.steps li::before{content:counter(s);width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:700 15px var(--display);background:var(--bg);border:1px solid var(--line)}
+ol.steps li.now{background:color-mix(in srgb,var(--accent) 12%,transparent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+ol.steps li.now::before{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+ol.steps li.done{color:var(--muted)}
+.mirrors{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr);gap:14px;align-items:end}
+@media (max-width:620px){.mirrors{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.mir.inner{grid-column:1/-1;grid-row:1}}
+.mir{display:grid;gap:6px;justify-items:center;border:0;background:none;padding:0;cursor:pointer;color:var(--fg);font:inherit;min-width:0}
+.mir .glass{position:relative;width:100%;aspect-ratio:1.55/1;filter:drop-shadow(0 3px 5px rgba(0,0,0,.3))}
+.mir.inner .glass{aspect-ratio:3.6/1}
+.camcard{display:grid;justify-items:center;gap:6px}
+.camcard .screen{width:100%;max-width:440px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;border:5px solid #15181c;background:#0d0f12}
+.camcard canvas{width:100%;height:100%;display:block}
+.camcard .name{font:700 15px var(--display);letter-spacing:.04em;text-transform:uppercase}
+.opts{gap:4px 14px}
+/* Geniş ekran: her şey tek ekranda — solda sahne + ayna şeridi, sağda kamera, kumanda, adımlar */
+.quick{display:flex;gap:6px;margin-left:auto}
+.quick+.tabs{margin-left:0}
+.below{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px;align-items:start}
+/* Sürücü koltuğu: ön cam tam alan, yan aynalar alt köşelerde, kuşbakışı küçük harita sağ üstte */
+.cockpit{position:relative;border-radius:12px;overflow:hidden;background:#1d2126;aspect-ratio:16/9;max-width:100%}
+.cockpit>#front{position:absolute;inset:0}
+.cockpit .toast{z-index:3;pointer-events:none}
+.cockpit .mir{position:absolute;bottom:3%;width:26%;z-index:2;gap:2px}
+#mir-L{left:1.2%}#mir-R{right:1.2%;width:25%}
+.cockpit .mir .glass{width:100%;height:auto;aspect-ratio:1.55/1}
+.cockpit .mir .name{color:#fff;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+.cockpit .mir .ab{background:rgba(20,24,28,.75);color:#fff;border-color:rgba(255,255,255,.25)}
+.cockpit .mir .chk2{border-color:rgba(255,255,255,.5)}
+.cockpit .stage{position:absolute;top:10px;right:10px;width:26%;aspect-ratio:2/1;min-height:0;z-index:2;border:2px solid rgba(255,255,255,.25);box-shadow:0 4px 14px rgba(0,0,0,.4);transition:width .2s}
+.cockpit .stage.big{width:52%}
+.cockpit .stage .hud{display:none}
+.mapbtn{position:absolute;right:6px;top:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:rgba(15,20,26,.8);color:#fff;font:600 13px var(--body);cursor:pointer;z-index:4}
+.mapbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:760px){
+  .cockpit{aspect-ratio:4/3}
+  .cockpit .mir{width:34%}#mir-R{width:33%}
+  .cockpit .mir .name{font-size:11px;gap:3px}
+  .cockpit .mir kbd{display:none}
+  .cockpit .mir .ab{width:18px;height:18px}
+  .cockpit .stage{width:40%}
+}
+@media (min-width:1000px) and (min-height:600px){
+  .wrap{max-width:none;padding-block:10px;gap:10px}
+  .main{height:calc(100dvh - 84px);min-height:480px}
+  .cockpit{aspect-ratio:auto;height:100%}
+  .below{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.2fr)}
+  h1{font-size:26px}
+}
+.mir canvas{width:100%;height:100%;display:block}
+.mir .name{font:700 16px var(--display);letter-spacing:.04em;text-transform:uppercase;display:flex;gap:6px;align-items:center}
+.mir .name kbd{font-size:11px}
+.mir .adj{display:inline-flex;gap:2px;margin-left:4px}
+.ab{font:600 11px var(--body);width:22px;height:20px;padding:0;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--fg);cursor:pointer}
+.ab:focus-visible,.mir:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mir{cursor:pointer}
+.mir .chk2{width:18px;height:18px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:11px;color:transparent}
+.mir.fresh .chk2{background:var(--ok);border-color:var(--ok);color:#fff}
+.mir:focus-visible .glass{outline:3px solid var(--accent);outline-offset:2px}
+.mirnote{font-size:13px;color:var(--muted);margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between}
+.tip{margin:12px 0 0;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+.stats{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:10px}
+.stats b{color:var(--fg);font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){ol.steps li{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="psign" aria-hidden="true">P</div>
+    <div>
+      <h1>Park Simülatörü</h1>
+      <p class="sub">Fiat Doblo ile pratik. Önce “Nasıl yapılır?” ile izle, sonra kendin dene.</p>
+    </div>
+    <div class="quick"><button class="btn primary" id="demo2">▶ Nasıl yapılır?</button><button class="btn" id="reset2">↺ Baştan</button></div>
+    <div class="tabs" role="group" aria-label="Senaryo">
+      <button class="tab" id="tab-par" aria-pressed="true">Paralel park</button>
+      <button class="tab" id="tab-perp" aria-pressed="false">Geri geri dik park</button>
+      <button class="tab" id="tab-dar" aria-pressed="false">Dar alan</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="cockpit" id="cockpit">
+      <canvas id="front" aria-label="Ön camdan görünüm"></canvas>
+      <div class="toast" id="toast">Sarı çerçeveli boşluğa park et</div>
+      <div class="mir side" id="mir-L" data-m="L" role="button" tabindex="0"><div class="glass"><canvas></canvas></div><span class="name"><span class="chk2">✓</span>Sol ayna <kbd>1</kbd><span class="adj" title="Aynayı yukarı/aşağı ayarla"><button class="ab" data-adj="L" data-d="-1" aria-label="Sol ayna yukarı">▲</button><button class="ab" data-adj="L" data-d="1" aria-label="Sol ayna aşağı">▼</button></span></span></div>
+      <div class="mir side" id="mir-R" data-m="R" role="button" tabindex="0"><div class="glass"><canvas></canvas></div><span class="name"><span class="chk2">✓</span>Sağ ayna <kbd>3</kbd><span class="adj" title="Aynayı yukarı/aşağı ayarla"><button class="ab" data-adj="R" data-d="-1" aria-label="Sağ ayna yukarı">▲</button><button class="ab" data-adj="R" data-d="1" aria-label="Sağ ayna aşağı">▼</button></span></span></div>
+      <div class="stage" id="stage">
+        <canvas id="cv"></canvas>
+        <button class="mapbtn" id="mapbtn" title="Kuşbakışını büyüt/küçült (M)">⤢ Büyüt</button>
+        <div class="hud"><span id="spd">0.0 km/s</span><span id="ang">Direksiyon 0°</span><span class="gear" id="gear">N</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="below">
+      <section class="card camcard" aria-label="Geri görüş kamerası">
+        <div class="screen"><canvas id="rearcam"></canvas></div>
+        <span class="name">Geri görüş kamerası</span>
+      </section>
+
+      <section class="card ctrlcard">
+        <h2>Kumanda</h2>
+        <div class="controls">
+          <svg class="wheel" viewBox="-50 -50 100 100" aria-hidden="true">
+            <g id="wheelG">
+              <circle r="44" fill="none" stroke="currentColor" stroke-width="9"/>
+              <circle r="10" fill="currentColor"/>
+              <path d="M-40 4 L-10 4 M10 4 L40 4 M0 10 L0 40" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+              <rect x="-4" y="-50" width="8" height="12" rx="2" fill="var(--accent)"/>
+            </g>
+          </svg>
+          <div class="steer">
+            <label for="steer"><span>← Sol</span><span>Direksiyon</span><span>Sağ →</span></label>
+            <input type="range" id="steer" min="-100" max="100" value="0" step="1">
+            <div class="row">
+              <button class="btn" id="left">Sola tam</button>
+              <button class="btn" id="center">Düzelt</button>
+              <button class="btn" id="right">Sağa tam</button>
+            </div>
+          </div>
+          <div class="pedals">
+            <button class="btn big fwd" id="fwd">▲ İLERİ</button>
+            <button class="btn big rev" id="rev">▼ GERİ</button>
+          </div>
+          <div class="row">
+            <button class="btn primary" id="demo">▶ Nasıl yapılır?</button>
+            <button class="btn" id="reset">↺ Baştan</button>
+          </div>
+          <div class="row opts">
+            <label class="chk"><input type="checkbox" id="guide" checked> Rehber çizgisi</label>
+            <label class="chk"><input type="checkbox" id="trail" checked> İz</label>
+            <label class="chk"><input type="checkbox" id="beep" checked> Sensör sesi</label>
+            <label class="chk"><input type="checkbox" id="mirRule" checked> Ayna kontrolü zorunlu</label>
+            <label class="chk"><input type="checkbox" id="mtilt" checked> Geri viteste aynalar aşağı eğilsin</label>
+          </div>
+          <p class="keys">Klavye: <kbd>↑</kbd> ileri, <kbd>↓</kbd> geri, <kbd>←</kbd><kbd>→</kbd> direksiyon, <kbd>Boşluk</kbd> düzelt, <kbd>R</kbd> baştan, <kbd>1</kbd> sol, <kbd>3</kbd> sağ aynaya bak, <kbd>M</kbd> haritayı büyüt/küçült.</p>
+        </div>
+      </section>
+
+      <section class="card stepcard">
+        <h2 id="stepsTitle">Adım adım paralel park</h2>
+        <ol class="steps" id="steps"></ol>
+        <p class="tip" id="tip"></p>
+        <p class="tip">Aynalar standart ayarda: ufuk ortaya yakın, kendi aracın iç kenarda. Sol aynada sürgülü kapı kolunun ucu görünür. Geri vitese geçmeden önce aynaya tıklayarak (ya da 1-2-3) kontrol ettiğini işaretle.</p>
+        <div class="stats"><span>Manevra: <b id="stMan">0</b></span><span>Temas: <b id="stHit">0</b></span><span>Ayna atlandı: <b id="stMir">0</b></span><span>En iyi: <b id="stBest">–</b></span></div>
+      </section>
+    </div>
+</div>
+
+<script>
+(()=>{
+// ---------- araç geometrisi (metre) ----------
+// Fiat Doblo: uzunluk 4,406 m, genişlik 1,848 m, dingil mesafesi 2,785 m
+const L=2.785, ROH=0.74, FOH=0.88, W=1.85, MAX=36*Math.PI/180, R=L/Math.tan(MAX);
+const LEN=L+ROH+FOH;
+const $=id=>document.getElementById(id);
+const cv=$('cv'), mainCtx=cv.getContext('2d'); let ctx=mainCtx;
+
+function corners(c){const fx=Math.cos(c.th),fy=Math.sin(c.th),rx=-fy,ry=fx;
+  return [[L+FOH,W/2],[L+FOH,-W/2],[-ROH,-W/2],[-ROH,W/2]].map(([a,b])=>[c.x+fx*a+rx*b,c.y+fy*a+ry*b]);}
+function boxAt(cx,cy,th){const k=(L+FOH-ROH)/2;return {x:cx-Math.cos(th)*k,y:cy-Math.sin(th)*k,th};}
+function sat(A,B){for(const P of[A,B])for(let i=0;i<4;i++){const[x1,y1]=P[i],[x2,y2]=P[(i+1)%4];const nx=y1-y2,ny=x2-x1;
+  let a1=1e9,a2=-1e9,b1=1e9,b2=-1e9;for(const[x,y]of A){const d=x*nx+y*ny;if(d<a1)a1=d;if(d>a2)a2=d}
+  for(const[x,y]of B){const d=x*nx+y*ny;if(d<b1)b1=d;if(d>b2)b2=d}if(a2<b1||b2<a1)return false}return true}
+
+// ---------- park etmiş araç modelleri (metre) ----------
+// len/wid: gövde; wb: dingil; roh: arka çıkıntı; body: alt gövde z; cab: kabin [a1,a2] arka tampondan, z, yarı-genişlik
+const MODELS={
+  sedan:  {name:'Sedan',len:4.70,wid:1.82,wb:2.80,roh:1.00,wr:0.32,body:[0.22,0.78],cab:[1.15,3.30,0.78,1.44,0.78],trunk:1},
+  hatch:  {name:'Hatchback',len:4.05,wid:1.76,wb:2.60,roh:0.62,wr:0.31,body:[0.22,0.80],cab:[0.20,2.75,0.80,1.48,0.78]},
+  wagon:  {name:'Station wagon',len:4.80,wid:1.83,wb:2.80,roh:1.00,wr:0.32,body:[0.22,0.80],cab:[0.12,3.35,0.80,1.50,0.79]},
+  compact:{name:'Şehir arabası',len:3.60,wid:1.66,wb:2.35,roh:0.50,wr:0.29,body:[0.22,0.82],cab:[0.15,2.40,0.82,1.52,0.74]},
+  suv:    {name:'Büyük cip',len:4.90,wid:1.97,wb:2.90,roh:0.95,wr:0.40,body:[0.40,1.12],cab:[0.15,3.55,1.12,1.90,0.92],jeep:1},
+  pickup: {name:'Kamyonet',len:5.30,wid:1.90,wb:3.20,roh:1.15,wr:0.38,body:[0.40,1.05],cab:[2.05,3.95,1.05,1.86,0.90],bed:[0.08,1.98]}
+};
+function parkedCorners(p){const M=MODELS[p.m],fx=Math.cos(p.th),fy=Math.sin(p.th),rx=-fy,ry=fx,hl=M.len/2,hw=M.wid/2;
+  return [[hl,hw],[hl,-hw],[-hl,-hw],[-hl,hw]].map(([a,b])=>[p.cx+fx*a+rx*b,p.cy+fy*a+ry*b]);}
+function modelBoxes(p){const M=MODELS[p.m],fx=Math.cos(p.th),fy=Math.sin(p.th),col=p.col,hl=M.len/2,hw=M.wid/2;
+  const A=a=>a-hl; // arka tampondan ölçüyü merkeze göre çevir
+  const det=[];const both=(o)=>{for(const f of[2,3])det.push({...o,f})};
+  // tekerlekler + çamurluk
+  for(const a of[M.roh,M.roh+M.wb]){both({u1:A(a)-M.wr-0.1,u2:A(a)+M.wr+0.1,z1:0.02,z2:M.wr*2+0.12,col:M.jeep?'#1d1f22':'rgba(0,0,0,.55)'});
+    both({u1:A(a)-M.wr,u2:A(a)+M.wr,z1:0,z2:M.wr*2,col:'#111214'});both({u1:A(a)-M.wr*0.55,u2:A(a)+M.wr*0.55,z1:M.wr*0.45,z2:M.wr*1.55,col:'#9aa1a9'});}
+  both({u1:-hl,u2:hl,z1:M.body[0],z2:M.body[0]+0.1,col:M.jeep?'#26292d':'rgba(0,0,0,.25)'});
+  // kapı derzleri ve kollar
+  const cm=(M.cab[0]+M.cab[1])/2;for(const a of[cm-0.05,M.cab[1]-0.15]){both({u1:A(a),u2:A(a)+0.015,z1:M.body[0]+0.1,z2:M.body[1],col:'rgba(0,0,0,.35)'});
+    both({u1:A(a)-0.32,u2:A(a)-0.12,z1:M.body[1]-0.16,z2:M.body[1]-0.12,col:'rgba(0,0,0,.55)'});}
+  // arka: stoplar, plaka (beyaz, mavi şeritli TR), tampon
+  const lz=M.body[1]-0.2;
+  det.push({f:1,u1:-hw+0.06,u2:-hw+0.38,z1:lz,z2:lz+0.15,col:'#b3201a'},{f:1,u1:hw-0.38,u2:hw-0.06,z1:lz,z2:lz+0.15,col:'#b3201a'},
+           {f:1,u1:-0.26,u2:0.26,z1:M.body[0]+0.12,z2:M.body[0]+0.24,col:'#f4f4f0'},{f:1,u1:-0.26,u2:-0.2,z1:M.body[0]+0.12,z2:M.body[0]+0.24,col:'#1d4fa8'},
+           {f:1,u1:-hw,u2:hw,z1:M.body[0],z2:M.body[0]+0.1,col:'rgba(0,0,0,.3)'});
+  det.push({f:0,u1:-hw+0.08,u2:-hw+0.42,z1:lz,z2:lz+0.13,col:'#f1efe2'},{f:0,u1:hw-0.42,u2:hw-0.08,z1:lz,z2:lz+0.13,col:'#f1efe2'},
+           {f:0,u1:-0.45,u2:0.45,z1:lz-0.18,z2:lz-0.02,col:'#202327'});
+  if(M.jeep){det.push({f:1,u1:-0.36,u2:0.36,z1:M.body[1]-0.62,z2:M.body[1]+0.1,col:'#151618'},{f:1,u1:-0.2,u2:0.2,z1:M.body[1]-0.45,z2:M.body[1]-0.07,col:'#6c737b'});}
+  if(M.bed){det.push({f:4,u1:A(M.bed[0]),u2:A(M.bed[1]),v1:-hw+0.07,v2:hw-0.07,col:'#2a2c2f'});}
+  const out=[{cx:p.cx,cy:p.cy,th:p.th,hl,hw,z0:M.body[0],z1:M.body[1],col,det}];
+  // kabin: gövde rengi direkler + camlar
+  const[c1,c2,z0,z1,chw]=M.cab,ch=(c2-c1)/2,cc=(c1+c2)/2-hl,cd=[];
+  cd.push({f:2,u1:-ch+0.14,u2:ch-0.2,z1:z0+0.06,z2:z1-0.08,col:'#25303a'},{f:3,u1:-ch+0.14,u2:ch-0.2,z1:z0+0.06,z2:z1-0.08,col:'#25303a'});
+  cd.push({f:2,u1:-0.03,u2:0.04,z1:z0+0.06,z2:z1-0.08,col:shade(col,0.62)},{f:3,u1:-0.03,u2:0.04,z1:z0+0.06,z2:z1-0.08,col:shade(col,0.62)});
+  cd.push({f:1,u1:-chw+0.1,u2:chw-0.1,z1:z0+0.08,z2:z1-0.08,col:'#25303a'},{f:0,u1:-chw+0.06,u2:chw-0.06,z1:z0+0.05,z2:z1-0.06,col:'#25303a'});
+  if(M.jeep)cd.push({f:4,u1:-ch+0.3,u2:ch-0.3,v1:-chw+0.08,v2:-chw+0.16,col:'#1a1b1d'},{f:4,u1:-ch+0.3,u2:ch-0.3,v1:chw-0.16,v2:chw-0.08,col:'#1a1b1d'});
+  out.push({cx:p.cx+fx*cc,cy:p.cy+fy*cc,th:p.th,hl:ch,hw:chw,z0,z1,col,det:cd,cab:1});
+  if(M.jeep)out.push({cx:p.cx+fx*cc,cy:p.cy+fy*cc,th:p.th,hl:ch-0.25,hw:chw-0.05,z0:z1,z1:z1+0.07,col:'#1d1f22',cab:1});
+  return out;}
+function drawModelTop(p){const M=MODELS[p.m],hl=M.len/2,hw=M.wid/2;
+  ctx.save();ctx.translate(p.cx,p.cy);ctx.rotate(p.th);
+  ctx.fillStyle='rgba(0,0,0,.28)';rrect(-hl+0.08,-hw+0.1,M.len,M.wid,0.4);ctx.fill();
+  ctx.fillStyle='#111';for(const a of[M.roh,M.roh+M.wb])for(const s of[-1,1])ctx.fillRect(a-hl-M.wr-0.02,s*(hw-0.06)-0.13,M.wr*2+0.04,0.26);
+  ctx.fillStyle=p.col;rrect(-hl,-hw,M.len,M.wid,M.jeep||M.bed?0.22:0.42);ctx.fill();ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=0.04;ctx.stroke();
+  const[c1,c2,,,chw]=M.cab,x1=c1-hl,x2=c2-hl;
+  ctx.fillStyle='rgba(20,30,40,.8)'; // ön cam, arka cam
+  ctx.beginPath();ctx.moveTo(x2-0.55,-chw+0.04);ctx.lineTo(x2,-chw);ctx.quadraticCurveTo(x2+0.12,0,x2,chw);ctx.lineTo(x2-0.55,chw-0.04);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(x1+0.35,-chw+0.06);ctx.lineTo(x1,-chw+0.04);ctx.quadraticCurveTo(x1-0.08,0,x1,chw-0.04);ctx.lineTo(x1+0.35,chw-0.06);ctx.closePath();ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,.1)';rrect(x1+0.4,-chw+0.06,x2-x1-1.0,chw*2-0.12,0.18);ctx.fill();
+  if(M.jeep){ctx.fillStyle='#1d1f22';ctx.fillRect(x1+0.5,-chw+0.08,x2-x1-1.2,0.08);ctx.fillRect(x1+0.5,chw-0.16,x2-x1-1.2,0.08);
+    for(let x=x1+0.7;x<x2-0.7;x+=0.35)ctx.fillRect(x,-chw+0.1,0.05,chw*2-0.2);
+    ctx.beginPath();ctx.arc(-hl-0.05,0,0.36,Math.PI/2,Math.PI*1.5);ctx.fill();}
+  if(M.bed){ctx.fillStyle='#2a2c2f';rrect(M.bed[0]-hl,-hw+0.08,M.bed[1]-M.bed[0],M.wid-0.16,0.06);ctx.fill();}
+  ctx.fillStyle='#fff6c8';ctx.fillRect(hl-0.1,-hw+0.08,0.08,0.3);ctx.fillRect(hl-0.1,hw-0.38,0.08,0.3);
+  ctx.fillStyle='#7a1515';ctx.fillRect(-hl+0.01,-hw+0.06,0.09,0.28);ctx.fillRect(-hl+0.01,hw-0.34,0.09,0.28);
+  ctx.fillStyle=p.col;ctx.fillRect(M.cab[1]-hl-0.75,-hw-0.14,0.15,0.16);ctx.fillRect(M.cab[1]-hl-0.75,hw-0.02,0.15,0.16);
+  ctx.restore();}
+
+const COLORS=['#8a94a3','#2f4f6f','#a33b3b','#d9d4c7','#3c5a3a','#59606b','#6b4f8a','#c9a227'];
+
+// ---------- senaryolar ----------
+const SC={
+ par:{
+  name:'Paralel park', W:40, H:12.6, curb:10, top:0.7,
+  start:{x:9,y:6.075,th:0},
+  slot:{x1:20,x2:26.5,y1:10-2.4,y2:10,ang:'h',curb:10,side:1},
+  slot2:{x1:22.0,x2:29.2,y1:0.7,y2:3.1,ang:'h',curb:0.7,side:-1},
+  parked:(()=>{const out=[];const put=(m,front,col)=>{const M=MODELS[m];out.push({m,cx:front-M.len/2,cy:10-0.25-M.wid/2,th:0,col});};
+    put('pickup',9.0,'#d9d4c7');put('hatch',14.25,'#8a94a3');put('sedan',20,'#2f4f6f');
+    const putR=(m,rear,col)=>{const M=MODELS[m];out.push({m,cx:rear+M.len/2,cy:10-0.25-M.wid/2,th:0,col});};
+    putR('wagon',26.5,'#a33b3b');putR('suv',32.4,'#3c5a3a');
+    // karşı kaldırım: ters yönde, düzensiz aralık, açı ve kaldırım mesafesiyle park etmiş araçlar
+    const opp=[['compact',2.3,'#22262b',0.15,2],['sedan',7.85,'#b9bec5',0.45,-3],['hatch',13.1,'#6e1f24',0.25,4],['suv',19.4,'#e9ebee',0.55,-2.5],
+               ['pickup',32.0,'#c8b48a',0.6,-4],['compact',37.65,'#c76a2a',0.3,6]];
+    for(const[m,cx,col,off,deg]of opp){const M=MODELS[m];out.push({m,cx,cy:0.7+0.25+off+M.wid/2,th:Math.PI+deg*Math.PI/180,col});}
+    return out;})(),
+  steps:[
+   'Sağ sinyal ver. Boşluğun önündeki aracın yanına, araya 50–100 cm kalacak şekilde paralel gel; arka tamponlar hizalanınca dur.',
+   'Aynaları kontrol et (sol ve sağ), omzunun üstünden arkaya bak. Geri vitese tak, direksiyonu sağa sonuna kadar çevir ve çok yavaş geri gel.',
+   'Araç yaklaşık 45° açı yapınca (sol aynada arkadaki aracın tamamı görününce) direksiyonu düzelt, düz geri gel.',
+   'Sağ ön köşen öndeki aracın arka tamponunu geçince direksiyonu sola sonuna kadar çevir, geri gelmeye devam et.',
+   'Araç kaldırıma paralel olunca dur. Direksiyonu düzelt, biraz ileri gelip iki araç arasında ortala.'],
+  tip:'İpucu: Kaldırıma 30 cm’den yakın olmak iyi, değmek değil. Yolun sol tarafında da 7 m’lik bir boşluk var: tek yönlü yoldaki gibi oraya da park etmeyi dene (sol sinyal, geri giderken direksiyon önce sola). Gösterim sağ taraftaki boşluk içindir.',
+  script:[
+   {say:0},{steer:0},{move:1,d:27.19-9},
+   {say:1},{look:'L'},{look:'R'},{steer:1},{move:-1,d:R*42*Math.PI/180},
+   {say:2},{steer:0},{move:-1,d:1.167},
+   {say:3},{steer:-1},{move:-1,d:R*42*Math.PI/180},
+   {say:4},{steer:0},{move:1,d:0.6},{done:1}]
+ },
+ perp:{
+  name:'Geri geri dik park', type:'perp', sw:2.6, topY:[0.2,5.2], W:36, H:18.4, top:0.15, curb:17.6,
+  start:{x:6,y:8,th:0},
+  slot:{x1:18.7,x2:21.3,y1:12,y2:17,ang:'v'},
+  spaces:[-3,-2,-1,0,1,2,3,4].map(k=>20+k*2.6),
+  topSpaces:[-5,-4,-3,-2,-1,0,1,2,3,4,5,6].map(k=>20+k*2.6),
+  parked:[[14.8,'hatch','#a33b3b',0],[17.4,'sedan','#d9d4c7',1],[22.6,'suv','#3c5a3a',0],[25.2,'compact','#8a94a3',1],[30.4,'pickup','#6b4f8a',0],[9.6,'wagon','#59606b',1]]
+    .map(([cx,m,col,o])=>({cx,cy:m==='pickup'?14.65:14.5,th:o?Math.PI/2:-Math.PI/2,m,col})),
+  topParked:[ // karşı sıra: dağınık (eğik, kaymış, çizgi üstüne taşmış)
+    [7.0+0.2,'sedan','#22262b',-1,3],[9.6-0.25,'suv','#e9ebee',1,-4],[14.8+0.45,'wagon','#253a5e',-1,7],[17.4+0.1,'compact','#c76a2a',1,-2],
+    [22.6-0.2,'hatch','#b9bec5',-1,-5],[25.2+0.35,'compact','#6e1f24',1,8],[30.4-0.3,'sedan','#c8b48a',-1,-3],[33.0+0.4,'hatch','#3d4a3f',1,4]]
+    .map(([cx,m,col,o,deg])=>{const M=MODELS[m];return {cx,cy:Math.min(5.15-M.len/2,2.75)+0.0,th:(o<0?-Math.PI/2:Math.PI/2)+deg*Math.PI/180,m,col};}),
+  steps:[
+   'Koridorda, park yerlerinden yaklaşık 3 m uzakta düz ve yavaş ilerle; hedef yeri kontrol et.',
+   'Arka tamponun, hedef yerin sağındaki park yerinin ortasını biraz geçince dur.',
+   'Aynaları kontrol et (sol ve sağ), omzunun üstünden arkaya bak. Geri vitese tak, direksiyonu sağa sonuna kadar çevir ve yavaşça geri gel; yandaki araçları sağ aynadan izle.',
+   'Araç park çizgilerine paralel olunca direksiyonu düzelt.',
+   'Düz geri gel; arka tamponla park yerinin sonu arasında ~30 cm kalınca dur.'],
+  tip:'İpucu: Geri geri park, çıkışta öne doğru rahatça çıkmanı sağlar. Yan araçlar yakınsa direksiyonu biraz erken düzeltip düz gelerek düzelt.',
+  script:[
+   {say:0},{steer:0},{move:1,d:(20+R)-6-4},
+   {say:1},{move:1,d:4},
+   {say:2},{look:'L'},{look:'R'},{steer:1},{move:-1,d:R*Math.PI/2},
+   {say:3},{steer:0},
+   {say:4},{move:-1,d:(17-0.3-ROH)-(8+R)},{done:1}]
+ },
+ dar:{
+  name:'Dar alanda dik park', type:'perp', sw:2.4, topY:[1.6,6.6], W:36, H:18.4, top:1.55, curb:17.6,
+  start:{x:6,y:8.6,th:0},
+  slot:{x1:18.8,x2:21.2,y1:12,y2:17,ang:'v'},
+  spaces:[-4,-3,-2,-1,0,1,2,3,4].map(k=>20+k*2.4),
+  topSpaces:[-5,-4,-3,-2,-1,0,1,2,3,4,5,6].map(k=>20+k*2.5),
+  parked:[[17.55,'sedan','#d9d4c7',0],[22.52,'suv','#3c5a3a',0],[15.2,'hatch','#a33b3b',1],[24.9,'wagon','#59606b',1],[12.8,'compact','#253a5e',0],[27.25,'pickup','#6b4f8a',0],[10.4,'sedan','#22262b',1]]
+    .map(([cx,m,col,o])=>({cx,cy:m==='pickup'?14.65:14.5,th:o?Math.PI/2:-Math.PI/2,m,col})),
+  topParked:[
+    [7.5-0.2,'hatch','#b9bec5',1,4],[10.0+0.3,'sedan','#6e1f24',-1,-3],[12.5,'compact','#c76a2a',1,6],[17.5+0.25,'suv','#e9ebee',-1,-2],
+    [20.0-0.15,'wagon','#253a5e',1,3],[22.5+0.3,'hatch','#3d4a3f',-1,-6],[25.0,'sedan','#c8b48a',1,2],[27.5-0.3,'compact','#8a94a3',-1,-7],[32.5+0.2,'sedan','#22262b',1,4]]
+    .map(([cx,m,col,o,deg])=>{const M=MODELS[m];return {cx,cy:6.4-M.len/2,th:(o<0?-Math.PI/2:Math.PI/2)+deg*Math.PI/180,m,col};}),
+  steps:[
+   'Koridor dar (yaklaşık 5,4 m), park yeri de dar (2,4 m). Karşı sıradaki araçlara 1 m kadar mesafe bırakarak yavaş ilerle.',
+   'Arka tamponun, hedef yerden iki sonraki park yerinin ortasına gelince dur.',
+   'Aynaları kontrol et. Geri vitese tak, direksiyonu sağa yaklaşık bir tur (¾ kilit) çevir ve çok yavaş geri gel. Önün karşı sıradaki araçlara yaklaşır: ön sensörü izle.',
+   'Araç çizgilere paralel olunca direksiyonu düzelt. Yan araçlarla aranda iki tarafta da ~60 cm kalmalı.',
+   'Düz geri gel; arka tamponla park yerinin sonu arasında ~30 cm kalınca dur.'],
+  tip:'İpucu: Dar alanda tam kilit her zaman en iyisi değildir; erken ve tam kilit, ön köşeyi karşı sıraya götürür. Sığmazsan biraz ileri çıkıp düzeltmek (manevra) normaldir.',
+  script:[
+   {say:0},{steer:0},{move:1,d:25.466-6-4},
+   {say:1},{move:1,d:4},
+   {say:2},{look:'L'},{look:'R'},{steer:0.75},{move:-1,d:8.586},
+   {say:3},{steer:0},
+   {say:4},{move:-1,d:1.895},{done:1}]
+ }
+};
+for(const k in SC){const s=SC[k];s.type=s.type||'par';s.slots=[s.slot].concat(s.slot2?[s.slot2]:[]);s.sw=s.sw||2.6;if(s.topParked)s.parked=s.parked.concat(s.topParked);s.obs=s.parked.map(parkedCorners)}
+for(const k in SC)SC[k].scene3d=null;
+
+// ---------- durum ----------
+// ---------- aynalar ----------
+const D2R=Math.PI/180;
+// Sürücü gözünün aynadaki yansıması (sanal göz). out: ayna merkezinin dışa açısı (− = içe).
+// Sol: düz/asferik ayna, ~24° görüş; sağ: dışbükey ayna, ~32° görüş, kaldırımı görmek için biraz aşağı.
+// Yan aynalar gerçek yansıma geometrisiyle: sürücü gözü (sol koltuk) aynadan yansır; sanal göz = ayna merkezi − mesafe × bakış yönü.
+// Aynanın arkasında kalan her şey (mesafeden yakın) kırpılır. mc: ayna camı merkezi (a ileri, b sağ, z), out: dışa bakış açısı.
+const EYE=[1.95,-0.37,1.22];
+const MIRRORS={L:{side:-1,mc:[2.40,-1.08,1.10],out:5.5*D2R,fov:24*D2R,pitch:4*D2R,rev:3*D2R,asph:1},
+  R:{side:1,mc:[2.40,1.08,1.10],convex:1,out:9*D2R,fov:36*D2R,pitch:4*D2R,rev:5*D2R}};
+let mirTilt=0; // geri viteste aynaların aşağı eğilmesi (0→1)
+// Sağ ayna dışbükey: görüntü aynanın hemen arkasındaki sanal bir noktadan, geniş açıyla görülür (nesneler küçük ve uzak görünür).
+for(const k of['L','R']){const M=MIRRORS[k],ps=M.side*M.out;const d=Math.hypot(EYE[0]-M.mc[0],EYE[1]-M.mc[1],EYE[2]-M.mc[2]);
+  if(M.convex){M.dist=0.05;M.a=M.mc[0]-0.04;M.b=M.mc[1]+0.06;M.z=M.mc[2];continue;}
+  M.dist=d;M.a=M.mc[0]+d*Math.cos(ps);M.b=M.mc[1]-d*Math.sin(ps);M.z=M.mc[2]+d*Math.sin(M.pitch);}
+const mpsi=M=>(M.side||0)*(M.out||0);
+const looked={L:-99,I:-99,R:-99}; let now=0;
+function look(m){looked[m]=now;}
+for(const m of['L','R']){const el=$('mir-'+m);el.addEventListener('click',()=>look(m));el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();look(m);}});}
+// kullanıcı ayna ayarı (dikey), tarayıcıda hatırlanır
+let mirAdj={L:0,R:0};try{Object.assign(mirAdj,JSON.parse(localStorage.getItem('park-mir')||'{}'))}catch(e){}
+document.querySelectorAll('.ab').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();const m=b.dataset.adj;
+  mirAdj[m]=Math.max(-4,Math.min(10,mirAdj[m]+1.5*(+b.dataset.d)));try{localStorage.setItem('park-mir',JSON.stringify(mirAdj))}catch(_){}}));
+let gearR=false; let key='par', sc=SC.par, car, steer=0, steerTarget=0, v=0, input=0, trail=[], demo=null, stats, lastDir=0, parkedOK=false, hitFlash=0;
+let best={}; try{best=JSON.parse(localStorage.getItem('park-best')||'{}')}catch(e){}
+
+function reset(keepDemo){
+  car={...sc.start}; gearR=false; steer=0; steerTarget=0; v=0; trail=[]; parkedOK=false; lastDir=0; hitFlash=0;
+  stats={man:0,hit:0,mir:0}; for(const k in looked)looked[k]=-99; if(!keepDemo) demo=null;
+  $('steer').value=0; $('demo').textContent='▶ Nasıl yapılır?';
+  renderSteps(-1); toast('Sarı çerçeveli boşluğa park et'); updStats();
+}
+function setScenario(k){key=k;sc=SC[k];if(!sc.scene3d)sc.scene3d=buildScene(sc);
+  for(const t of['par','perp','dar'])$('tab-'+t).setAttribute('aria-pressed',k===t);
+  $('stepsTitle').textContent='Adım adım '+sc.name.toLowerCase();$('tip').textContent=sc.tip;resize();reset();}
+
+function renderSteps(cur){$('steps').innerHTML=sc.steps.map((t,i)=>`<li class="${i===cur?'now':i<cur?'done':''}">${t}</li>`).join('');}
+let toastT=0;function toast(msg,cls=''){const t=$('toast');t.textContent=msg;t.className='toast '+cls;}
+function updStats(){$('stMan').textContent=stats.man;$('stHit').textContent=stats.hit;$('stMir').textContent=stats.mir;$('stBest').textContent=best[key]?best[key]+' manevra':'–';}
+
+// ---------- girişler ----------
+const held={fwd:false,rev:false,left:false,right:false};
+function bindHold(id,name){const b=$(id);
+  const on=e=>{e.preventDefault();if(demo)stopDemo();held[name]=true;b.classList.add('on');try{b.setPointerCapture(e.pointerId)}catch(_){}};
+  const off=()=>{held[name]=false;b.classList.remove('on')};
+  b.addEventListener('pointerdown',on);['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,off));
+  b.addEventListener('contextmenu',e=>e.preventDefault());}
+bindHold('fwd','fwd');bindHold('rev','rev');
+$('steer').addEventListener('input',e=>{if(demo)stopDemo();steerTarget=e.target.value/100});
+$('left').onclick=()=>{if(demo)stopDemo();steerTarget=-1};
+$('right').onclick=()=>{if(demo)stopDemo();steerTarget=1};
+$('center').onclick=()=>{if(demo)stopDemo();steerTarget=0};
+$('reset').onclick=()=>reset();const toggleMap=()=>{const big=$('stage').classList.toggle('big');$('mapbtn').textContent=big?'⤡ Küçült':'⤢ Büyüt';};$('mapbtn').onclick=e=>{e.stopPropagation();toggleMap();};$('reset2').onclick=()=>reset();$('demo2').onclick=()=>$('demo').click();
+for(const t of['par','perp','dar'])$('tab-'+t).onclick=()=>setScenario(t);
+$('demo').onclick=()=>{if(demo){stopDemo();return}reset(true);demo={i:0,acc:0};$('demo').textContent=$('demo2').textContent='■ Durdur';};
+function stopDemo(){demo=null;$('demo').textContent=$('demo2').textContent='▶ Nasıl yapılır?';}
+const KM={ArrowUp:'fwd',KeyW:'fwd',ArrowDown:'rev',KeyS:'rev',ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right'};
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'&&e.target.type==='range'&&/Arrow(Left|Right)/.test(e.code))e.preventDefault();
+  if(KM[e.code]){e.preventDefault();if(demo)stopDemo();held[KM[e.code]]=true;}
+  else if(e.code==='Space'&&e.target.tagName!=='BUTTON'){e.preventDefault();if(demo)stopDemo();steerTarget=0}
+  else if(e.code==='KeyR')reset();
+  else if(e.code==='KeyM')toggleMap();
+  else if(e.code==='Digit1'||e.code==='Numpad1')look('L');else if(e.code==='Digit3'||e.code==='Numpad3')look('R');});
+addEventListener('keyup',e=>{if(KM[e.code])held[KM[e.code]]=false});
+addEventListener('blur',()=>{for(const k in held)held[k]=false});
+
+// ---------- fizik ----------
+const VMAX=1.4, ACC=2.2, BRK=4.5, STEER_RATE=1.6;
+function step(dt){
+  now+=dt;
+  let target=0;
+  if(demo){const a=sc.script[demo.i];
+    if(!a){stopDemo();}
+    else if(a.say!=null){renderSteps(a.say);toast((a.say+1)+'. '+sc.steps[a.say].split('.')[0]);demo.i++;}
+    else if(a.look){if(demo.t==null){demo.t=0;look(a.look);}demo.t+=dt;if(demo.t>0.9){demo.t=null;demo.i++;}}
+    else if(a.steer!=null){steerTarget=a.steer;if(Math.abs(steer-a.steer)<1e-3&&Math.abs(v)<1e-3){demo.i++;}}
+    else if(a.move){const rem=a.d-demo.acc;const vm=Math.min(1.1,Math.sqrt(2*2.0*Math.max(rem,0))+0.05);
+      target=a.move*vm;if(rem<=0.002){target=0;v=0;demo.acc=0;demo.i++;}}
+    else if(a.done){stopDemo();renderSteps(sc.steps.length);}
+  } else {
+    target=(held.fwd?VMAX:0)-(held.rev?VMAX:0);
+    if(held.left)steerTarget=Math.max(-1,steerTarget-1.2*dt);
+    if(held.right)steerTarget=Math.min(1,steerTarget+1.2*dt);
+    $('steer').value=Math.round(steerTarget*100);
+  }
+  // direksiyon
+  const ds=steerTarget-steer;steer+=Math.sign(ds)*Math.min(Math.abs(ds),STEER_RATE*dt);
+  if(demo)$('steer').value=Math.round(steer*100);
+  // hız
+  const dv=target-v;const rate=(target===0||Math.sign(target)!==Math.sign(v)&&v!==0)?BRK:ACC;
+  v+=Math.sign(dv)*Math.min(Math.abs(dv),rate*dt);
+  if(Math.abs(v)<1e-4)v=0;
+  if(v!==0){const dir=Math.sign(v);if(dir!==lastDir){
+    if(dir<0&&$('mirRule').checked){const miss=['L','R'].filter(m=>now-looked[m]>10);
+      if(miss.length){stats.mir++;const nm={L:'sol ayna',I:'iç dikiz',R:'sağ ayna'};toast('Geri gitmeden önce bakmadın: '+miss.map(m=>nm[m]).join(', '),'bad');}}
+    if(lastDir!==0||dir<0)stats.man+= (lastDir!==0?1:0);lastDir=dir;updStats();}}
+  // hareket (alt adımlar)
+  const n=4;for(let k=0;k<n;k++){const h=dt/n;if(v===0)break;
+    const prev={...car};const d=steer*MAX;
+    car.x+=v*Math.cos(car.th)*h;car.y+=v*Math.sin(car.th)*h;car.th+=v/L*Math.tan(d)*h;
+    if(demo)demo.acc+=Math.abs(v)*h;
+    const P=corners(car);let bad=null;
+    for(const o of sc.obs)if(sat(P,o)){bad='Başka bir araca çarptın!';break}
+    if(!bad&&sc.curb!=null&&P.some(p=>p[1]>sc.curb))bad='Kaldırıma çıktın!';
+    if(!bad&&sc.top!=null&&P.some(p=>p[1]<sc.top))bad='Kaldırıma çıktın!';
+    if(!bad&&P.some(p=>p[0]<0.2||p[0]>sc.W-0.2||p[1]<0.2||p[1]>sc.H-0.2))bad='Alanın dışına çıkma.';
+    if(bad){car=prev;v=0;if(hitFlash<=0){stats.hit++;updStats();}hitFlash=0.6;toast(bad+' Geri çekil ve tekrar dene.','bad');if(demo)stopDemo();break}
+  }
+  if(hitFlash>0)hitFlash-=dt;
+  // iz
+  if(v!==0){const last=trail[trail.length-1];if(!last||Math.hypot(last[0]-car.x,last[1]-car.y)>0.15){trail.push([car.x,car.y]);if(trail.length>900)trail.shift();}}
+  if(v<0||held.rev)gearR=true;else if(v>0||held.fwd)gearR=false;
+  updateSensors(dt);
+  {const tt=gearR&&$('mtilt').checked?1:0;mirTilt+=Math.sign(tt-mirTilt)*Math.min(Math.abs(tt-mirTilt),dt*2.5);}
+  checkPark();
+  // HUD
+  $('spd').textContent=(Math.abs(v)*3.6).toFixed(1)+' km/s';
+  $('ang').textContent='Direksiyon '+(steer>0.02?'sağ ':steer<-0.02?'sol ':'')+Math.round(Math.abs(steer)*540)+'°';
+  const g=$('gear');g.textContent=gearR?'R':(v>0||held.fwd?'D':'N');g.className='gear'+(g.textContent==='R'?' r':'');
+  $('wheelG').setAttribute('transform',`rotate(${steer*540})`);
+}
+function checkPark(){
+  const P=corners(car);let hit=null;
+  for(const s of sc.slots){const inside=P.every(([x,y])=>x>=s.x1-0.02&&x<=s.x2+0.02&&y>=s.y1-0.02&&y<=s.y2+0.02);
+    const angOK=s.ang==='h'?Math.abs(Math.sin(car.th))<Math.sin(6*Math.PI/180):Math.abs(norm(car.th+Math.PI/2))<6*Math.PI/180;
+    if(inside&&angOK){hit=s;break;}}
+  const ok=!!hit&&v===0;
+  if(ok&&!parkedOK){parkedOK=hit;const s=hit;
+    let extra='';if(s.curb!=null){const gap=s.side>0?s.curb-Math.max(...P.map(p=>p[1])):Math.min(...P.map(p=>p[1]))-s.curb;extra=` Kaldırıma ${Math.round(gap*100)} cm.`;}
+    else{const back=s.y2-Math.max(...P.map(p=>p[1]));extra=` Arkada ${Math.round(back*100)} cm boşluk.`;}
+    const m=Math.max(1,stats.man);
+    toast('Tebrikler, park başarılı!'+extra,'ok');
+    if(!demo&&(!best[key]||m<best[key])){best[key]=m;try{localStorage.setItem('park-best',JSON.stringify(best))}catch(e){}updStats();}
+  } else if(!ok&&parkedOK&&v!==0){parkedOK=false;}
+}
+const norm=a=>Math.atan2(Math.sin(a),Math.cos(a));
+
+// ---------- çizim ----------
+let S=20,ox=0,oy=0,cw=0,ch=0,dpr=1,follow=false;
+function resize(){const r=cv.getBoundingClientRect();dpr=Math.min(2,devicePixelRatio||1);cw=r.width;ch=r.height;
+  cv.width=Math.round(cw*dpr);cv.height=Math.round(ch*dpr);
+  S=Math.min(cw/sc.W,ch/sc.H);follow=false;
+  if(S<15){S=Math.min(15,ch/sc.H*1.0);follow=cw/S<sc.W;}
+  oy=(ch-sc.H*S)/2;ox=(cw-sc.W*S)/2;}
+new ResizeObserver(resize).observe($('stage'));
+
+function rrect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function drawCar(c,col,opts={}){
+  ctx.save();ctx.translate(c.x,c.y);ctx.rotate(c.th);
+  // gölge
+  ctx.fillStyle='rgba(0,0,0,.28)';rrect(-ROH+0.08,-W/2+0.1,LEN,W,0.45);ctx.fill();
+  // tekerlekler
+  ctx.fillStyle='#111';
+  const wh=(x,y,a)=>{ctx.save();ctx.translate(x,y);ctx.rotate(a);ctx.fillRect(-0.34,-0.12,0.68,0.24);ctx.restore();};
+  const sa=(opts.steer||0)*MAX;
+  wh(0,-W/2+0.05,0);wh(0,W/2-0.05,0);wh(L,-W/2+0.05,sa);wh(L,W/2-0.05,sa);
+  // gövde
+  ctx.fillStyle=col;rrect(-ROH,-W/2,LEN,W,opts.player?0.3:0.42);ctx.fill();
+  if(opts.player){ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=0.04;ctx.stroke();drawVanTop(col,opts);ctx.restore();return;}
+  ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=0.04;ctx.stroke();
+  // camlar ve tavan
+  ctx.fillStyle='rgba(20,30,40,.78)';
+  ctx.beginPath();ctx.moveTo(1.95,-0.72);ctx.lineTo(2.45,-0.8);ctx.quadraticCurveTo(2.62,0,2.45,0.8);ctx.lineTo(1.95,0.72);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(-0.15,-0.7);ctx.lineTo(0.15,-0.68);ctx.lineTo(0.15,0.68);ctx.lineTo(-0.15,0.7);ctx.quadraticCurveTo(-0.3,0,-0.15,-0.7);ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,.12)';rrect(0.2,-0.68,1.72,1.36,0.2);ctx.fill();
+  // aynalar
+  ctx.fillStyle=col;ctx.fillRect(1.85,-W/2-0.16,0.16,0.18);ctx.fillRect(1.85,W/2-0.02,0.16,0.18);
+  // farlar
+  ctx.fillStyle='#fff6c8';ctx.fillRect(L+FOH-0.12,-0.78,0.1,0.3);ctx.fillRect(L+FOH-0.12,0.48,0.1,0.3);
+  // stop / geri lambaları
+  const rev=opts.rev, brake=opts.brake;
+  ctx.fillStyle=brake?'#ff2a2a':'#7a1515';ctx.fillRect(-ROH+0.02,-0.8,0.1,0.28);ctx.fillRect(-ROH+0.02,0.52,0.1,0.28);
+  if(rev){ctx.fillStyle='#ffffff';ctx.fillRect(-ROH+0.02,-0.5,0.1,0.16);ctx.fillRect(-ROH+0.02,0.34,0.1,0.16);
+    const g=ctx.createLinearGradient(-ROH,0,-ROH-1.6,0);g.addColorStop(0,'rgba(255,255,255,.28)');g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(-ROH,-0.8);ctx.lineTo(-ROH-1.6,-1.1);ctx.lineTo(-ROH-1.6,1.1);ctx.lineTo(-ROH,0.8);ctx.fill();}
+  if(opts.player){ // eğitim aracı işareti
+    ctx.fillStyle='#1f5fbf';rrect(0.75,-0.32,0.64,0.64,0.08);ctx.fill();
+    ctx.fillStyle='#fff';ctx.font='700 0.5px Barlow Condensed, Arial Narrow, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.save();ctx.translate(1.07,0);ctx.rotate(Math.PI/2);ctx.fillText('L',0,0.03);ctx.restore();}
+  ctx.restore();
+}
+function drawVanTop(col,opts){ // Doblo üstten: uzun düz tavan, tavan rayları, eğimli ön cam, kısa kaput
+  ctx.fillStyle='rgba(20,30,40,.8)';
+  ctx.beginPath();ctx.moveTo(2.08,-0.82);ctx.lineTo(2.68,-0.86);ctx.quadraticCurveTo(2.82,0,2.68,0.86);ctx.lineTo(2.08,0.82);ctx.closePath();ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,.06)';rrect(-0.66,-0.84,2.72,1.68,0.12);ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,.18)';ctx.lineWidth=0.03;for(let x=-0.4;x<2;x+=0.35){ctx.beginPath();ctx.moveTo(x,-0.6);ctx.lineTo(x,0.6);ctx.stroke();}
+  ctx.fillStyle='#2b2f35';ctx.fillRect(-0.5,-0.72,2.4,0.07);ctx.fillRect(-0.5,0.65,2.4,0.07);
+  ctx.fillStyle='rgba(20,30,40,.8)';ctx.fillRect(-0.72,-0.7,0.06,1.4);
+  ctx.strokeStyle='rgba(0,0,0,.3)';ctx.lineWidth=0.025;ctx.beginPath();ctx.moveTo(0.6,-W/2);ctx.lineTo(0.6,-W/2+0.05);ctx.moveTo(0.6,W/2);ctx.lineTo(0.6,W/2-0.05);ctx.stroke();
+  ctx.fillStyle='#16191d';ctx.fillRect(2.3,-W/2-0.2,0.2,0.22);ctx.fillRect(2.3,W/2-0.02,0.2,0.22);
+  ctx.fillStyle='#fff6c8';ctx.fillRect(L+FOH-0.1,-0.84,0.08,0.3);ctx.fillRect(L+FOH-0.1,0.54,0.08,0.3);
+  ctx.fillStyle=opts.brake?'#ff2a2a':'#8a1a14';ctx.fillRect(-ROH,-0.92,0.12,0.2);ctx.fillRect(-ROH,0.72,0.12,0.2);
+  if(opts.rev){ctx.fillStyle='#fff';ctx.fillRect(-ROH,-0.72,0.08,0.1);ctx.fillRect(-ROH,0.62,0.08,0.1);
+    const g=ctx.createLinearGradient(-ROH,0,-ROH-1.6,0);g.addColorStop(0,'rgba(255,255,255,.28)');g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(-ROH,-0.85);ctx.lineTo(-ROH-1.6,-1.15);ctx.lineTo(-ROH-1.6,1.15);ctx.lineTo(-ROH,0.85);ctx.fill();}
+  ctx.fillStyle='#1f5fbf';rrect(0.75,-0.32,0.64,0.64,0.08);ctx.fill();
+  ctx.fillStyle='#fff';ctx.font='700 0.5px Barlow Condensed, Arial Narrow, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.save();ctx.translate(1.07,0);ctx.rotate(Math.PI/2);ctx.fillText('L',0,0.03);ctx.restore();
+}
+function predict(dir){ // rehber çizgisi: mevcut direksiyonla 4 m
+  const c={...car},pts=[[],[]];const d=steer*MAX;
+  for(let i=0;i<=40;i++){const P=corners(c);
+    if(dir<0){pts[0].push(P[2]);pts[1].push(P[3]);}else{pts[0].push(P[0]);pts[1].push(P[1]);}
+    const h=0.1*dir;c.x+=h*Math.cos(c.th);c.y+=h*Math.sin(c.th);c.th+=h/L*Math.tan(d);}
+  return pts;}
+
+function draw(){
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#4a5560';ctx.fillRect(0,0,cw,ch);
+  let tx=ox;if(follow){const vw=cw/S;let cx=car.x+Math.cos(car.th)*1.4-vw/2;cx=Math.max(0,Math.min(sc.W-vw,cx));tx=-cx*S;}
+  ctx.setTransform(dpr*S,0,0,dpr*S,dpr*tx,dpr*oy);
+  drawWorld(false);
+  // bakılan aynanın görüş alanı
+  for(const m in MIRRORS){const age=now-looked[m];if(age>2.5)continue;const M=MIRRORS[m],ps=mpsi(M);
+    const fx=Math.cos(car.th),fy=Math.sin(car.th),rx=-fy,ry=fx;const W2=(a,b)=>[car.x+fx*a+rx*b,car.y+fy*a+ry*b];
+    const ma=M.mc?M.mc[0]:M.a,mb=M.mc?M.mc[1]:M.b;const o=W2(ma,mb),q=[-1,1].map(sg=>{const ang=ps+sg*M.fov/2;return W2(ma-12*Math.cos(ang),mb+12*Math.sin(ang))});
+    ctx.fillStyle=`rgba(120,190,255,${0.22*(1-age/2.5)})`;ctx.beginPath();ctx.moveTo(...o);ctx.lineTo(...q[0]);ctx.lineTo(...q[1]);ctx.closePath();ctx.fill();}
+  drawPlayer();
+  drawMirrors();
+  drawRearCam();
+  drawFront();
+}
+function drawPlayer(){
+  drawCar(car,hitFlash>0&&Math.floor(hitFlash*10)%2?'#ff5a4f':'#f2f4f7',{player:1,steer,rev:gearR&&v<=0,brake:v===0||(Math.abs(v)>0&&!held.fwd&&!held.rev&&!demo)});
+}
+
+// ---------- 3B sahne ----------
+const BODY_C=(LEN/2-ROH); // arka akstan gövde merkezine
+function buildScene(sc){
+  const g=[],bx=[],tr=[];const X0=-40,X1=sc.W+40;
+  const rect=(x1,y1,x2,y2,col,z=0)=>g.push({p:[[x1,y1,z],[x2,y1,z],[x2,y2,z],[x1,y2,z]],col});
+  const curbFace=(y)=>g.push({p:[[X0,y,0],[X1,y,0],[X1,y,0.14],[X0,y,0.14]],col:'#e2e5e8'});
+  const bld=(y1,y2,hs=1)=>{let i=0;for(let x=X0;x<X1;x+=10){const h=(5+((i*37)%5)*1.6)*hs;
+    const det=[];for(let fl=1.2;fl<h-1;fl+=2.6)for(let wx=-3.2;wx<=3.2;wx+=1.6)for(const f of[2,3])det.push({f,u1:wx-0.45,u2:wx+0.45,z1:fl,z2:fl+1.2,col:'rgba(40,55,70,.55)'});
+    bx.push({cx:x+4.5,cy:(y1+y2)/2,th:0,hl:4.3,hw:(y2-y1)/2,z0:0,z1:h,col:['#9c8f7d','#b7a58c','#8d97a1','#a8846c','#c2b8a3'][i%5],det});i++;}};
+  if(sc.curb===10){ // paralel
+    rect(X0,-6,X1,0.7,'#b9bec4',0.14);rect(X0,sc.curb,X1,sc.H+8,'#c7ccd1',0.14);curbFace(sc.curb);curbFace(0.7);
+    for(let x=X0+0.5;x<X1;x+=4.5)rect(x,3.9,x+2.5,4.04,'#e9edf0');
+    bld(sc.H+1.5,sc.H+8);bld(-8,-1.2);
+    for(let x=4-36;x<X1;x+=9)tr.push([x,sc.curb+1.6]);
+  } else {
+    const sy=sc.topY[0]-0.2;rect(X0,-6,X1,sy,'#c7ccd1',0.14);rect(X0,17.6,X1,26,'#c7ccd1',0.14);curbFace(sy);curbFace(17.6);
+    const tsw=sc.topSpaces[1]-sc.topSpaces[0];for(const c of sc.topSpaces)rect(c-tsw/2-0.06,sc.topY[0],c-tsw/2+0.06,sc.topY[1],'#eef1f3');
+    for(const c of sc.spaces)rect(c-sc.sw/2-0.06,12,c-sc.sw/2+0.06,17,'#eef1f3');
+    rect(sc.spaces[0]-sc.sw/2,17,sc.spaces[0]-sc.sw/2+sc.spaces.length*sc.sw,17.12,'#eef1f3');
+    for(const x of[4,30])rect(x,7.65,x+2,8.05,'rgba(255,255,255,.5)');
+    bld(-9,-2);bld(40,46,0.7);for(let x=-30;x<X1;x+=7)tr.push([x,21.5]);rect(X0,26,X1,60,'#7d9a62',0.02);
+  }
+  for(const sl of sc.slots)rect(sl.x1+0.1,sl.y1+0.1,sl.x2-0.1,sl.y2-0.1,'rgba(245,197,24,.28)',0.005);
+  for(const p of sc.parked)bx.push(...modelBoxes(p));
+  return {g,bx,tr};
+}
+// park etmiş sıradan otomobiller
+function carBoxes(c,col){const fx=Math.cos(c.th),fy=Math.sin(c.th);
+  const wf=L-BODY_C,wr=-BODY_C,whl=[];
+  for(const f of[2,3])for(const u of[wr,wf])whl.push({f,u1:u-0.34,u2:u+0.34,z1:-0.18,z2:0.45,col:'#141517'});
+  const det=[...whl,
+    {f:1,u1:-0.82,u2:-0.5,z1:0.42,z2:0.58,col:'#b3201a'},{f:1,u1:0.5,u2:0.82,z1:0.42,z2:0.58,col:'#b3201a'},
+    {f:1,u1:-0.3,u2:0.3,z1:0.3,z2:0.42,col:'#e8e8e0'},
+    {f:0,u1:-0.82,u2:-0.5,z1:0.42,z2:0.55,col:'#f1efe2'},{f:0,u1:0.5,u2:0.82,z1:0.42,z2:0.55,col:'#f1efe2'}];
+  return [{cx:c.x+fx*BODY_C,cy:c.y+fy*BODY_C,th:c.th,hl:LEN/2,hw:W/2,z0:0.18,z1:0.8,col,det},
+          {cx:c.x+fx*1.05,cy:c.y+fy*1.05,th:c.th,hl:1.3,hw:0.78,z0:0.8,z1:1.45,col,glass:1}];}
+// kendi aracın: Fiat Doblo (4,41 m × 1,85 m × 1,81 m, dingil 2,785 m)
+function dobloBoxes(c,col){const fx=Math.cos(c.th),fy=Math.sin(c.th);
+  const lowC=BODY_C, upA1=-0.70, upA2=2.05, upC=(upA1+upA2)/2;
+  const D=[],U=[];const lo=(a1,a2,z1,z2,col)=>{for(const f of[2,3])D.push({f,u1:a1-lowC,u2:a2-lowC,z1,z2,col})};
+  const up=(a1,a2,z1,z2,col)=>{for(const f of[2,3])U.push({f,u1:a1-upC,u2:a2-upC,z1,z2,col})};
+  lo(-ROH,L+FOH,0.30,0.44,'#3a3d42');                 // alt plastik kaplama
+  lo(-0.47,0.47,0.02,0.70,'#1b1d20');lo(-0.33,0.33,0.0,0.62,'#0e0f10');lo(-0.17,0.17,0.15,0.47,'#a3aab2'); // arka teker
+  lo(L-0.47,L+0.47,0.02,0.70,'#1b1d20');lo(L-0.33,L+0.33,0.0,0.62,'#0e0f10');
+  lo(0.60,0.615,0.44,1.02,'#8f98a2');lo(1.63,1.645,0.44,1.02,'#8f98a2'); // sürgülü kapı derzleri
+  lo(0.66,0.88,0.915,0.965,'#26292d');lo(0.68,0.86,0.952,0.962,'#5b6168'); // sürgülü kapı kolu
+  lo(1.70,1.88,0.915,0.965,'#26292d');                // ön kapı kolu
+  lo(-ROH,-0.62,0.70,1.02,'#c4231a');up(upA1,-0.60,1.02,1.32,'#c4231a'); // dikey stop lambası
+  up(-0.52,0.50,1.12,1.66,'#26303a');                 // arka yan cam
+  up(0.70,1.56,1.10,1.66,'#26303a');                  // sürgülü kapı camı
+  up(1.70,2.03,1.10,1.64,'#26303a');                  // ön kapı camı
+  up(-0.52,0.62,1.045,1.075,'#2b2e33');               // sürgülü kapı rayı
+  return [{cx:c.x+fx*lowC,cy:c.y+fy*lowC,th:c.th,hl:LEN/2,hw:W/2,z0:0.30,z1:1.02,col,det:D,own:1},
+          {cx:c.x+fx*upC,cy:c.y+fy*upC,th:c.th,hl:(upA2-upA1)/2,hw:0.915,z0:1.02,z1:1.81,col,det:U,own:1}];}
+function shade(hex,k){if(hex[0]!=='#')return hex;const n=parseInt(hex.slice(1),16);const r=(n>>16)&255,g=(n>>8)&255,b=n&255;return `rgb(${Math.min(255,r*k)|0},${Math.min(255,g*k)|0},${Math.min(255,b*k)|0})`;}
+
+// kamera: araç koordinatında (a ileri, b sağ, z yukarı), arkaya bakar; görüntü ayna gibi çevrilmiş
+function makeCam(pw,ph,o){
+  const fx=Math.cos(car.th),fy=Math.sin(car.th),rx=-fy,ry=fx;
+  const camx=car.x+fx*o.a+rx*o.b,camy=car.y+fy*o.a+ry*o.b,camz=o.z;
+  const la=-Math.cos(o.psi),lb=Math.sin(o.psi);const lx=la*fx+lb*rx,ly=la*fy+lb*ry;
+  const na=o.flip===false?-lb:lb,nb=o.flip===false?la:-la;const nx=na*fx+nb*rx,ny=na*fy+nb*ry;
+  const F=pw/(2*Math.tan(o.fov/2)),cp=Math.cos(o.pitch||0),sp=Math.sin(o.pitch||0);
+  const cam={pw,ph,F,camx,camy,camz,NEAR:o.near||0.06,
+    to([x,y,z]){const dx=x-camx,dy=y-camy,X=dx*nx+dy*ny,Y=z-camz,Z=dx*lx+dy*ly;return[X,Y*cp+Z*sp,Z*cp-Y*sp]},
+    scr([X,Y,Z]){return[pw/2+F*X/Z,ph/2-F*Y/Z]},
+    horizon:ph/2-F*Math.tan(o.pitch||0)};
+  return cam;}
+function polyCam(c,cam,P,fill,stroke,lw){const C=P.map(p=>cam.to(p)),o=[],N=cam.NEAR;
+  for(let i=0;i<C.length;i++){const A=C[i],B=C[(i+1)%C.length];const ai=A[2]>=N,bi=B[2]>=N;if(ai)o.push(A);
+    if(ai!==bi&&(stroke==null||i<C.length-1||true)){const t=(N-A[2])/(B[2]-A[2]);o.push([A[0]+(B[0]-A[0])*t,A[1]+(B[1]-A[1])*t,N]);}}
+  if(o.length<3)return;c.beginPath();o.forEach((p,i)=>{const[sx,sy]=cam.scr(p);i?c.lineTo(sx,sy):c.moveTo(sx,sy)});c.closePath();
+  if(fill){c.fillStyle=fill;c.fill();}}
+function lineCam(c,cam,pts){ // zemindeki çizgi (yakın düzlem kırpmalı)
+  let started=false;c.beginPath();
+  for(let i=0;i<pts.length;i++){const A=cam.to(pts[i]);if(A[2]<cam.NEAR){started=false;continue}const[sx,sy]=cam.scr(A);started?c.lineTo(sx,sy):c.moveTo(sx,sy);started=true;}
+  c.stroke();}
+function renderScene(c,cam,withOwn){
+  const {pw,ph}=cam;
+  const sky=c.createLinearGradient(0,0,0,Math.max(1,cam.horizon));sky.addColorStop(0,'#86acd2');sky.addColorStop(1,'#dbe6f0');
+  c.fillStyle=sky;c.fillRect(0,0,pw,ph);c.fillStyle='#4a4f56';c.fillRect(0,cam.horizon,pw,ph-cam.horizon);
+  const S3=sc.scene3d;for(const q of S3.g)polyCam(c,cam,q.p,q.col);
+  const items=[...S3.bx.map(b=>({b})),...S3.tr.map(t=>({t}))];
+  if(withOwn==='hood')items.push({b:{...dobloBoxes(car,'#cfd4da')[0],det:[]}});
+  else if(withOwn)items.push(...dobloBoxes(car,hitFlash>0?'#ff5a4f':'#eef0f3').map(b=>({b})));
+  for(const it of items){const x=it.b?it.b.cx:it.t[0],y=it.b?it.b.cy:it.t[1];it.d=Math.hypot(x-cam.camx,y-cam.camy);
+    if(it.b&&(it.b.glass||it.b.cab))it.d-=0.01;if(it.b&&it.b.own)it.d=-1+(it.b.z0>1?0.001:0)*-1;}
+  items.sort((p,q)=>q.d-p.d);
+  for(const it of items){
+    if(it.t){const[x,y]=it.t;const A=cam.to([x,y,0.14]),T=cam.to([x,y,1.9]),Cn=cam.to([x,y,2.7]);if(A[2]<cam.NEAR||Cn[2]<cam.NEAR)continue;
+      const a=cam.scr(A),t=cam.scr(T),cc=cam.scr(Cn);c.strokeStyle='#5a4532';c.lineWidth=Math.max(1,cam.F*0.22/A[2]);c.beginPath();c.moveTo(...a);c.lineTo(...t);c.stroke();
+      c.fillStyle='#4f7d40';c.beginPath();c.arc(cc[0],cc[1],cam.F*1.1/Cn[2],0,7);c.fill();c.fillStyle='rgba(255,255,255,.08)';c.beginPath();c.arc(cc[0]-cam.F*0.3/Cn[2],cc[1]-cam.F*0.3/Cn[2],cam.F*0.5/Cn[2],0,7);c.fill();continue;}
+    drawBox(c,cam,it.b);}
+}
+function drawBox(c,cam,B){
+  const fx=Math.cos(B.th),fy=Math.sin(B.th),rx=-fy,ry=fx;
+  const P=(sa,sb,z)=>[B.cx+fx*sa*B.hl+rx*sb*B.hw,B.cy+fy*sa*B.hl+ry*sb*B.hw,z];
+  const FACES=[[[1,-1],[1,1],fx,fy,B.hl,0.84],[[-1,1],[-1,-1],-fx,-fy,B.hl,0.8],[[-1,1],[1,1],rx,ry,B.hw,0.7],[[1,-1],[-1,-1],-rx,-ry,B.hw,0.74]];
+  // gölge
+  if(B.z0<0.5&&!B.own)polyCam(c,cam,[P(-1.05,-1.08,0.01),P(1.05,-1.08,0.01),P(1.05,1.08,0.01),P(-1.05,1.08,0.01)],'rgba(0,0,0,.35)');
+  FACES.forEach(([[a1,b1],[a2,b2],nX,nY,ext,k],fi)=>{
+    const fcx=B.cx+nX*ext,fcy=B.cy+nY*ext;if((cam.camx-fcx)*nX+(cam.camy-fcy)*nY<=0)return;
+    polyCam(c,cam,[P(a1,b1,B.z0),P(a2,b2,B.z0),P(a2,b2,B.z1),P(a1,b1,B.z1)],B.glass?'#26313c':shade(B.col,k));
+    if(B.det)for(const d of B.det){if(d.f!==fi)continue;
+      let Q;if(fi>=2){const sb=(fi===2?1:-1)*1.004;Q=[P(d.u1/B.hl,sb,d.z1),P(d.u2/B.hl,sb,d.z1),P(d.u2/B.hl,sb,d.z2),P(d.u1/B.hl,sb,d.z2)];}
+      else{const sa=(fi===0?1:-1)*1.004;Q=[P(sa,d.u1/B.hw,d.z1),P(sa,d.u2/B.hw,d.z1),P(sa,d.u2/B.hw,d.z2),P(sa,d.u1/B.hw,d.z2)];}
+      polyCam(c,cam,Q,d.col);}
+  });
+  if(cam.camz>B.z1){polyCam(c,cam,[P(-1,-1,B.z1),P(1,-1,B.z1),P(1,1,B.z1),P(-1,1,B.z1)],shade(B.col,B.glass?0.95:1));
+    if(B.det)for(const d of B.det)if(d.f===4)polyCam(c,cam,[P(d.u1/B.hl,d.v1/B.hw,B.z1+0.003),P(d.u2/B.hl,d.v1/B.hw,B.z1+0.003),P(d.u2/B.hl,d.v2/B.hw,B.z1+0.003),P(d.u1/B.hl,d.v2/B.hw,B.z1+0.003)],d.col);}
+}
+
+// ---------- ayna gövdeleri ----------
+// Normalleştirilmiş sol ayna camı (iç kenar sağda). Sağ ayna yatay simetriği.
+const SIDE_SHAPE=[['M',0.16,0.10],['L',0.90,0.13],['Q',0.975,0.14,0.975,0.25],['L',0.965,0.80],['Q',0.96,0.90,0.87,0.91],['L',0.34,0.93],['Q',0.05,0.93,0.035,0.58],['Q',0.03,0.12,0.16,0.10]];
+function shapePath(c,pw,ph,flip,inset){const cx=pw/2,cy=ph/2,s=1-inset;const X=x=>cx+((flip?1-x:x)*pw-cx)*s,Y=y=>cy+(y*ph-cy)*s;
+  c.beginPath();for(const[k,...n]of SIDE_SHAPE){if(k==='M')c.moveTo(X(n[0]),Y(n[1]));else if(k==='L')c.lineTo(X(n[0]),Y(n[1]));else c.quadraticCurveTo(X(n[0]),Y(n[1]),X(n[2]),Y(n[3]));}c.closePath();}
+function drawMirrors(){
+  for(const m in MIRRORS){const el=$('mir-'+m),cvs=el.querySelector('canvas');const M=MIRRORS[m];
+    el.classList.toggle('look',now-looked[m]<2.5);el.classList.toggle('fresh',now-looked[m]<10);
+    const r=cvs.getBoundingClientRect();if(!r.width)continue;const pw=Math.round(r.width*dpr),ph=Math.round(r.height*dpr);
+    if(cvs.width!==pw||cvs.height!==ph){cvs.width=pw;cvs.height=ph;}
+    const c=cvs.getContext('2d');c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,pw,ph);
+    const flip=m==='R';const lookHi=now-looked[m]<2.5;
+    if(M.inner){ // iç dikiz: çerçevesiz dikdörtgen
+      const rr=ph*0.42;c.fillStyle='#15181c';c.beginPath();c.roundRect(0,0,pw,ph,rr);c.fill();
+      c.save();c.beginPath();c.roundRect(pw*0.025,ph*0.08,pw*0.95,ph*0.84,rr*0.8);c.clip();
+      const gw=pw*0.95,gh=ph*0.84;c.translate(pw*0.025,ph*0.08);
+      const cam=makeCam(gw,gh,{a:M.a,b:M.b,z:M.z,psi:0,fov:M.fov,pitch:M.pitch});renderScene(c,cam,false);
+      // Doblo bagaj kapısı camı çerçevesi, koltuk başlıkları
+      c.fillStyle='#1d2126';c.fillRect(0,0,gw,gh*0.12);c.fillRect(0,gh*0.8,gw,gh*0.2);
+      c.beginPath();c.moveTo(0,0);c.lineTo(gw*0.1,0);c.lineTo(gw*0.08,gh);c.lineTo(0,gh);c.fill();
+      c.beginPath();c.moveTo(gw,0);c.lineTo(gw*0.9,0);c.lineTo(gw*0.92,gh);c.lineTo(gw,gh);c.fill();
+      c.fillStyle='#30363e';for(const x of[0.25,0.5,0.75]){c.beginPath();c.roundRect(gw*x-gw*0.06,gh*0.6,gw*0.12,gh*0.34,gh*0.1);c.fill();}
+      const gl=c.createLinearGradient(0,0,gw,gh);gl.addColorStop(0,'rgba(255,255,255,.1)');gl.addColorStop(.5,'rgba(255,255,255,0)');c.fillStyle=gl;c.fillRect(0,0,gw,gh);
+      c.restore();
+      if(lookHi){c.strokeStyle='#5b93e6';c.lineWidth=3*dpr;c.beginPath();c.roundRect(1.5*dpr,1.5*dpr,pw-3*dpr,ph-3*dpr,rr);c.stroke();}
+      continue;}
+    // dış ayna gövdesi (kapı rengi kapak + siyah çerçeve)
+    shapePath(c,pw,ph,flip,-0.04);const hg=c.createLinearGradient(0,0,0,ph);hg.addColorStop(0,'#2a2f35');hg.addColorStop(1,'#111316');c.fillStyle=hg;c.fill();
+    if(lookHi){c.strokeStyle='#5b93e6';c.lineWidth=3*dpr;c.stroke();}
+    c.save();shapePath(c,pw,ph,flip,0.035);c.clip();
+    const cam=makeCam(pw,ph,{a:M.a,b:M.b,z:M.z,psi:mpsi(M),fov:M.fov,pitch:M.pitch+((mirAdj[m]||0)*D2R)+mirTilt*(M.rev||0),near:M.dist});renderScene(c,cam,true);
+    if(M.asph){ // asferik bölge çizgisi (dış kenara yakın, kesik)
+      c.strokeStyle='rgba(255,255,255,.55)';c.lineWidth=1.2*dpr;c.setLineDash([3*dpr,3*dpr]);const x=flip?pw*0.74:pw*0.26;
+      c.beginPath();c.moveTo(x,0);c.lineTo(x-pw*0.02*(flip?-1:1),ph);c.stroke();c.setLineDash([]);}
+    const gl=c.createLinearGradient(0,0,pw,ph);gl.addColorStop(0,'rgba(255,255,255,.14)');gl.addColorStop(.45,'rgba(255,255,255,0)');c.fillStyle=gl;c.fillRect(0,0,pw,ph);
+    c.restore();
+    shapePath(c,pw,ph,flip,0.035);c.strokeStyle='rgba(0,0,0,.6)';c.lineWidth=1.5*dpr;c.stroke();
+  }
+}
+
+// ---------- geri görüş kamerası ----------
+function drawRearCam(){
+  const cvs=$('rearcam');const r=cvs.getBoundingClientRect();if(!r.width)return;const pw=Math.round(r.width*dpr),ph=Math.round(r.height*dpr);
+  if(cvs.width!==pw||cvs.height!==ph){cvs.width=pw;cvs.height=ph;}
+  const c=cvs.getContext('2d');c.setTransform(1,0,0,1,0,0);
+  if(!gearR){c.fillStyle='#0d0f12';c.fillRect(0,0,pw,ph);c.fillStyle='#8a939d';c.font=`600 ${13*dpr}px Barlow, system-ui, sans-serif`;c.textAlign='center';c.textBaseline='middle';
+    c.fillText('Geri vitese takınca açılır',pw/2,ph/2);return;}
+  const cam=makeCam(pw,ph,{a:-ROH+0.02,b:0,z:1.0,psi:0,fov:118*D2R,pitch:34*D2R});
+  renderScene(c,cam,false);
+  const fx=Math.cos(car.th),fy=Math.sin(car.th),rx=-fy,ry=fx;const Wp=(a,b)=>[car.x+fx*a+rx*b,car.y+fy*a+ry*b,0];
+  // sabit mesafe çizgileri: 0,5 m kırmızı, 1 m sarı, 2 m yeşil
+  c.lineWidth=3*dpr;c.lineCap='round';
+  for(const[d,col]of[[0.5,'#ff3b30'],[1,'#ffd60a'],[2,'#34c759']]){c.strokeStyle=col;const a=-ROH-d;
+    lineCam(c,cam,[Wp(a,-W/2),Wp(a,-W/2+0.35)]);lineCam(c,cam,[Wp(a,W/2-0.35),Wp(a,W/2)]);}
+  c.strokeStyle='rgba(255,214,10,.9)';
+  for(const sb of[-1,1]){const pts=[];for(let d=0;d<=2.2;d+=0.1)pts.push(Wp(-ROH-d,sb*W/2));lineCam(c,cam,pts);}
+  // dinamik (direksiyona göre) yol çizgileri
+  const sim={...car},d=steer*MAX,L1=[],L2=[];
+  for(let i=0;i<=35;i++){const P=corners(sim);L1.push([...P[2],0]);L2.push([...P[3],0]);const h=-0.1;sim.x+=h*Math.cos(sim.th);sim.y+=h*Math.sin(sim.th);sim.th+=h/L*Math.tan(d);}
+  c.strokeStyle='rgba(80,200,255,.9)';c.setLineDash([8*dpr,6*dpr]);lineCam(c,cam,L1);lineCam(c,cam,L2);c.setLineDash([]);
+  // tampon
+  const bg=c.createLinearGradient(0,ph*0.86,0,ph);bg.addColorStop(0,'#3b4047');bg.addColorStop(1,'#16191d');c.fillStyle=bg;
+  c.beginPath();c.moveTo(0,ph);c.lineTo(0,ph*0.93);c.quadraticCurveTo(pw/2,ph*0.84,pw,ph*0.93);c.lineTo(pw,ph);c.fill();
+  // balık gözü vinyeti
+  const vg=c.createRadialGradient(pw/2,ph/2,ph*0.3,pw/2,ph/2,pw*0.62);vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,.55)');c.fillStyle=vg;c.fillRect(0,0,pw,ph);
+  c.fillStyle='rgba(255,255,255,.85)';c.font=`600 ${11*dpr}px Barlow, system-ui, sans-serif`;c.textAlign='left';c.textBaseline='top';
+  c.fillText('Çevreyi de kontrol edin',8*dpr,7*dpr);
+}
+
+// ---------- ön cam (sürücü gözünden) ----------
+function drawFront(){
+  const cvs=$('front');const r=cvs.getBoundingClientRect();if(!r.width)return;const pw=Math.round(r.width*dpr),ph=Math.round(r.height*dpr);
+  if(cvs.width!==pw||cvs.height!==ph){cvs.width=pw;cvs.height=ph;}
+  const c=cvs.getContext('2d');c.setTransform(1,0,0,1,0,0);
+  const FOV=Math.min(95,Math.max(70,62+18*(pw/ph-1)))*D2R,PITCH=6*D2R;
+  const cam=makeCam(pw,ph,{a:EYE[0],b:EYE[1],z:EYE[2]+0.06,psi:Math.PI,fov:FOV,pitch:PITCH,near:0.25,flip:false});
+  renderScene(c,cam,'hood');
+  const F=cam.F,yAt=deg=>ph/2+F*Math.tan(deg*D2R-PITCH); // ufkun deg derece altı
+  // tavan döşemesi ve güneşlik
+  let g=c.createLinearGradient(0,0,0,ph*0.09);g.addColorStop(0,'#2a2e33');g.addColorStop(1,'#3a3f45');c.fillStyle=g;
+  c.beginPath();c.moveTo(0,0);c.lineTo(pw,0);c.lineTo(pw,ph*0.05);c.quadraticCurveTo(pw/2,ph*0.1,0,ph*0.05);c.fill();
+  c.fillStyle='#4a4f56';c.beginPath();c.roundRect(pw*0.06,ph*0.02,pw*0.26,ph*0.07,ph*0.02);c.fill();c.beginPath();c.roundRect(pw*0.62,ph*0.02,pw*0.26,ph*0.07,ph*0.02);c.fill();
+  // A direkleri (sürücü solda: sol direk daha geniş ve yakın görünür)
+  c.fillStyle='#24282d';
+  c.beginPath();c.moveTo(0,0);c.lineTo(pw*0.11,0);c.lineTo(pw*0.035,yAt(16));c.lineTo(0,yAt(17));c.fill();
+  c.beginPath();c.moveTo(pw,0);c.lineTo(pw*0.94,0);c.lineTo(pw*0.985,yAt(14));c.lineTo(pw,yAt(15));c.fill();
+  // gösterge paneli
+  const dy=Math.min(yAt(10.8),ph*0.86);
+  g=c.createLinearGradient(0,dy,0,ph);g.addColorStop(0,'#2c3137');g.addColorStop(0.15,'#1d2126');g.addColorStop(1,'#121417');c.fillStyle=g;
+  c.beginPath();c.moveTo(0,dy+ph*0.02);c.quadraticCurveTo(pw*0.3,dy-ph*0.035,pw*0.5,dy);c.quadraticCurveTo(pw*0.75,dy+ph*0.03,pw,dy+ph*0.01);c.lineTo(pw,ph);c.lineTo(0,ph);c.fill();
+  c.strokeStyle='rgba(255,255,255,.08)';c.lineWidth=2*dpr;c.stroke();
+  // orta ekran: geri viteste kamera, değilse park sensörü
+  const sw=Math.min(pw*0.2,(ph-dy)*1.45),sh=sw*0.56,sx=pw*0.56-sw/2,sy=Math.min(ph-sh-8*dpr,dy+ph*0.06);
+  c.fillStyle='#0b0d10';c.beginPath();c.roundRect(sx-4*dpr,sy-4*dpr,sw+8*dpr,sh+8*dpr,8*dpr);c.fill();
+  if(gearR){c.drawImage($('rearcam'),sx,sy,sw,sh);}
+  else{c.fillStyle='#10161d';c.fillRect(sx,sy,sw,sh);drawSensorWidget(c,sx,sy,sw,sh);}
+  // direksiyon (sol)
+  const wx=pw*0.34,wy=ph+ph*0.12,wr=Math.min(ph*0.36,pw*0.14);
+  c.save();c.translate(wx,wy);c.rotate(steer*540*D2R);
+  c.strokeStyle='#15171a';c.lineWidth=wr*0.16;c.beginPath();c.arc(0,0,wr,0,7);c.stroke();
+  c.strokeStyle='#2b2f34';c.lineWidth=wr*0.05;c.beginPath();c.arc(0,0,wr-wr*0.03,Math.PI*1.1,Math.PI*1.9);c.stroke();
+  c.fillStyle='#1b1d21';c.fillRect(-wr,-wr*0.06,wr*2,wr*0.14);c.beginPath();c.arc(0,0,wr*0.3,0,7);c.fill();
+  c.fillStyle='#c33';c.fillRect(-wr*0.03,-wr*1.08,wr*0.06,wr*0.12);
+  c.restore();
+  // hız / vites
+  c.fillStyle='rgba(255,255,255,.9)';c.font=`700 ${Math.round(14*dpr)}px Barlow, system-ui, sans-serif`;c.textAlign='center';c.textBaseline='middle';
+  const gtxt=gearR?'R':(v>0||held.fwd?'D':'N');c.fillStyle=gtxt==='R'?'#ff6b5e':'#e8edf2';
+  c.fillText(`${gtxt}  ·  ${(Math.abs(v)*3.6).toFixed(1)} km/s`,sx+sw/2,sy-12*dpr);
+}
+function drawSensorWidget(c,x,y,w,h){
+  const cx=x+w*0.32,cy=y+h/2,s=h/120;
+  c.fillStyle='#eef0f3';c.beginPath();c.roundRect(cx-10*s,cy-24*s,20*s,48*s,5*s);c.fill();
+  for(const[front,d]of[[true,sens.front],[false,sens.rear]])for(let i=0;i<3;i++){const th=[1.5,0.9,0.4][i];
+    c.strokeStyle=d<=th?sensColor(Math.max(d,0)):'rgba(255,255,255,.14)';c.lineWidth=5*s;c.beginPath();const rr=(38-i*8)*s;
+    if(front)c.arc(cx,cy-8*s,rr,Math.PI*1.25,Math.PI*1.75);else c.arc(cx,cy+8*s,rr,Math.PI*0.25,Math.PI*0.75);c.stroke();}
+  const fmt=d=>d>1.5?'—':Math.round(d*100)+' cm';
+  c.fillStyle='#fff';c.font=`600 ${Math.round(13*s)}px Barlow, system-ui, sans-serif`;c.textAlign='left';c.textBaseline='middle';
+  c.fillText('Ön '+fmt(sens.front),x+w*0.58,cy-16*s);c.fillText('Arka '+fmt(sens.rear),x+w*0.58,cy+16*s);
+}
+// ---------- park sensörleri ----------
+function sensorDist(front){
+  const fx=Math.cos(car.th),fy=Math.sin(car.th),rx=-fy,ry=fx;const aB=front?L+FOH:-ROH,sgn=front?1:-1;
+  let best=9;
+  const test=(x,y)=>{const dx=x-car.x,dy=y-car.y;const a=dx*fx+dy*fy,b=dx*rx+dy*ry;const da=(a-aB)*sgn;if(da<-0.02||da>2.5)return;
+    const lat=Math.max(0,Math.abs(b)-W/2);if(lat>0.6)return;const d=Math.hypot(Math.max(da,0),lat*1.4);if(d<best)best=d;};
+  for(const o of sc.obs)for(let i=0;i<4;i++){const[x1,y1]=o[i],[x2,y2]=o[(i+1)%4];const n=Math.ceil(Math.hypot(x2-x1,y2-y1)/0.08);
+    for(let k=0;k<=n;k++)test(x1+(x2-x1)*k/n,y1+(y2-y1)*k/n);}
+  // yüksek kaldırım / duvar (dik park arkası)
+  if(sc.type==='perp')for(let x=car.x-4;x<=car.x+4;x+=0.08)test(x,17.6);
+  return best;}
+let sens={front:9,rear:9},beepT=0,actx=null;
+function sensColor(d){return d>1.5?null:d>0.9?'#34c759':d>0.5?'#ffd60a':d>0.3?'#ff9f0a':'#ff3b30';}
+function updateSensors(dt){
+  sens.front=sensorDist(true);sens.rear=sensorDist(false);
+  const d=gearR?sens.rear:sens.front;
+  if(!$('beep').checked||!actx||d>1.5){beepT=0;return;}
+  const period=d<0.3?0:0.08+(d-0.3)*0.45;beepT-=dt;
+  if(period===0){if(beepT<=0){beep(0.12);beepT=0.11;}}else if(beepT<=0){beep(0.07);beepT=period;}
+}
+function beep(len){try{const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=2300;o.type='sine';g.gain.value=0.06;
+  o.connect(g).connect(actx.destination);o.start();o.stop(actx.currentTime+len);}catch(e){}}
+function initAudio(){if(actx)return;try{actx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}}
+addEventListener('pointerdown',initAudio,{once:false});addEventListener('keydown',initAudio);
+function drawSensorsHUD(){
+  ctx.setTransform(dpr,0,0,dpr,0,0);const x0=12,y0=12,w=58,h=110;
+  ctx.fillStyle='rgba(15,20,26,.78)';ctx.beginPath();ctx.roundRect(x0,y0,w+52,h,10);ctx.fill();
+  const cx=x0+29,cy=y0+h/2;
+  ctx.fillStyle='#eef0f3';ctx.beginPath();ctx.roundRect(cx-10,cy-24,20,48,5);ctx.fill();ctx.fillStyle='#26303a';ctx.fillRect(cx-8,cy-16,16,7);
+  for(const[front,d]of[[true,sens.front],[false,sens.rear]]){const sg=front?-1:1;
+    for(let i=0;i<3;i++){const th=[1.5,0.9,0.4][i];const col=d<=th?sensColor(Math.max(d,0)) :'rgba(255,255,255,.14)';
+      ctx.strokeStyle=d<=th?col:'rgba(255,255,255,.14)';ctx.lineWidth=4;ctx.beginPath();const rr=36-i*7;
+      if(front)ctx.arc(cx,cy-8,rr,Math.PI*1.25,Math.PI*1.75);else ctx.arc(cx,cy+8,rr,Math.PI*0.25,Math.PI*0.75);ctx.stroke();}}
+  ctx.fillStyle='#fff';ctx.font='600 12px Barlow, system-ui, sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';
+  const fmt=d=>d>1.5?'—':Math.round(d*100)+' cm';
+  ctx.fillText('Ön',x0+62,cy-30);ctx.fillText(fmt(sens.front),x0+62,cy-15);ctx.fillText('Arka',x0+62,cy+15);ctx.fillText(fmt(sens.rear),x0+62,cy+30);
+}
+function drawWorld(mirror){
+  // asfalt
+  ctx.fillStyle='#3d4249';ctx.fillRect(0,0,sc.W,sc.H);
+  ctx.fillStyle='rgba(255,255,255,.025)';for(let i=0;i<220;i++){const x=(i*7.31)%sc.W,y=(i*3.77)%sc.H;ctx.fillRect(x,y,0.12,0.12);}
+  if(sc.type==='par'){
+    // karşı kaldırım
+    ctx.fillStyle='#9aa1a8';ctx.fillRect(0,0,sc.W,0.7);ctx.fillStyle='#b9bec4';ctx.fillRect(0,0,sc.W,0.55);
+    // şerit çizgisi
+    ctx.fillStyle='#e9edf0';for(let x=0.5;x<sc.W;x+=4.5)ctx.fillRect(x,3.9,2.5,0.14);
+    // kaldırım + yaya yolu
+    ctx.fillStyle='#c7ccd1';ctx.fillRect(0,sc.curb,sc.W,sc.H-sc.curb);
+    ctx.fillStyle='#e2e5e8';ctx.fillRect(0,sc.curb,sc.W,0.22);
+    ctx.strokeStyle='rgba(0,0,0,.08)';ctx.lineWidth=0.03;for(let x=0;x<sc.W;x+=0.8){ctx.beginPath();ctx.moveTo(x,sc.curb+0.22);ctx.lineTo(x,sc.H);ctx.stroke();}
+    for(let x=4;x<sc.W;x+=9){ctx.fillStyle='#5b8a4a';ctx.beginPath();ctx.arc(x,sc.curb+1.6,0.9,0,7);ctx.fill();ctx.fillStyle='rgba(255,255,255,.12)';ctx.beginPath();ctx.arc(x-0.25,sc.curb+1.35,0.4,0,7);ctx.fill();}
+  } else {
+    ctx.fillStyle='#c7ccd1';ctx.fillRect(0,0,sc.W,sc.topY[0]-0.2);ctx.fillStyle='#e2e5e8';ctx.fillRect(0,sc.topY[0]-0.3,sc.W,0.12);
+    const tsw=sc.topSpaces[1]-sc.topSpaces[0];ctx.fillStyle='#eef1f3';for(const c of sc.topSpaces)ctx.fillRect(c-tsw/2-0.06,sc.topY[0],0.12,sc.topY[1]-sc.topY[0]);
+    // ok işaretleri
+    ctx.fillStyle='rgba(255,255,255,.55)';for(const x of[4,30]){ctx.beginPath();ctx.moveTo(x,7.6);ctx.lineTo(x+1.6,7.6);ctx.lineTo(x+1.6,7.3);ctx.lineTo(x+2.4,7.85);ctx.lineTo(x+1.6,8.4);ctx.lineTo(x+1.6,8.1);ctx.lineTo(x,8.1);ctx.fill();}
+    // park çizgileri
+    ctx.fillStyle='#eef1f3';for(const c of sc.spaces){ctx.fillRect(c-sc.sw/2-0.06,12,0.12,5);}
+    ctx.fillRect(sc.spaces[0]-sc.sw/2,17,sc.spaces.length*sc.sw,0.12);
+    ctx.fillStyle='#c7ccd1';ctx.fillRect(0,17.6,sc.W,sc.H-17.6);ctx.fillStyle='#e2e5e8';ctx.fillRect(0,17.6,sc.W,0.2);
+  }
+  // hedef
+  for(const s of sc.slots){ctx.save();ctx.setLineDash([0.35,0.25]);ctx.lineWidth=0.09;ctx.strokeStyle=parkedOK===s?'#4ade80':'#f5c518';
+  ctx.fillStyle=parkedOK===s?'rgba(74,222,128,.18)':'rgba(245,197,24,.10)';
+  ctx.fillRect(s.x1+0.05,s.y1+0.05,s.x2-s.x1-0.1,s.y2-s.y1-0.1);ctx.strokeRect(s.x1+0.05,s.y1+0.05,s.x2-s.x1-0.1,s.y2-s.y1-0.1);ctx.restore();
+  ctx.fillStyle='rgba(245,197,24,.9)';ctx.font='700 1.1px Barlow Condensed, Arial Narrow, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  if(s.ang==='h')ctx.fillText('P',(s.x1+s.x2)/2,s.side>0?s.y1+1.2:s.y2-1.2);else ctx.fillText('P',(s.x1+s.x2)/2,s.y2-0.9);}
+  // park etmiş araçlar
+  for(const p of sc.parked)drawModelTop(p);
+  // iz
+  if(mirror)return;
+  if($('trail').checked&&trail.length>1){ctx.strokeStyle='rgba(120,190,255,.55)';ctx.lineWidth=0.07;ctx.beginPath();ctx.moveTo(...trail[0]);for(const p of trail)ctx.lineTo(...p);ctx.stroke();}
+  // rehber çizgisi
+  if($('guide').checked&&!parkedOK){const dir=v>0||(v===0&&held.fwd)?1:v<0||held.rev?-1:(demo?(sc.script[demo.i]?.move||-1):-1);
+    const pts=predict(dir);ctx.lineWidth=0.07;ctx.strokeStyle=dir<0?'rgba(255,170,60,.85)':'rgba(140,230,160,.8)';ctx.setLineDash([0.25,0.18]);
+    for(const line of pts){ctx.beginPath();ctx.moveTo(...line[0]);for(const p of line)ctx.lineTo(...p);ctx.stroke();}ctx.setLineDash([]);}
+}
+
+let t0=performance.now();
+function loop(t){const dt=Math.min(0.05,(t-t0)/1000);t0=t;step(dt);draw();requestAnimationFrame(loop);}
+setScenario('par');requestAnimationFrame(loop);
+})();
+</script>
+
+</body></html>
